@@ -1,0 +1,24 @@
+# Prevent script execution in the uploads directory
+Options -ExecCGI -Indexes
+SetHandler text/plain
+
+# For Apache 2.4+
+<FilesMatch "\.(php|phtml|php3|php4|php5|php7|phps|pl|py|cgi|exe|dll|asp|aspx|shtml|sh|phar)$">
+    Require all denied
+</FilesMatch>
+
+# Fallback for older Apache versions (might need adjustment)
+# <IfModule !mod_authz_core.c>
+#   <FilesMatch "\.(php|phtml|php3|php4|php5|php7|phps|pl|py|cgi|exe|dll|asp|aspx|shtml|sh|phar)$">
+#      Order allow,deny
+#      Deny from all
+#   </FilesMatch>
+# </IfModule>
+
+# Prevent listing of directory contents (already covered by -Indexes but good to be explicit)
+# Options -Indexes
+```
+Now, I need to update the documentation (`AGENTS.md` and `README.md`).
+
+**Update `AGENTS.md`**
+```
