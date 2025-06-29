@@ -38,6 +38,24 @@ try {
 
 $allowed_task_statuses = ['todo', 'inprogress', 'done'];
 
+// Helper function to create a notification
+function createNotification($pdo, $recipientUserId, $message, $linkUrl = null) {
+    try {
+        $stmt = $pdo->prepare("INSERT INTO notifications (user_id, message, link_url) VALUES (:user_id, :message, :link_url)");
+        $stmt->execute([
+            'user_id' => $recipientUserId,
+            'message' => $message,
+            'link_url' => $linkUrl
+        ]);
+        return $stmt->rowCount() > 0;
+    } catch (PDOException $e) {
+        // Log error, but don't let notification failure break the main operation
+        error_log("Notification creation failed for user $recipientUserId: " . $e->getMessage());
+        return false;
+    }
+}
+
+
 switch ($action) {
     case 'get_tasks':
         $targetBoardId = ($userRole === 'super_admin' && isset($_GET['board_id'])) ? $_GET['board_id'] : $activeBoardId;
@@ -132,31 +150,71 @@ switch ($action) {
             $stmt = $pdo->prepare("INSERT INTO tasks (user_id, board_id, title, description, status, image_path, assigned_to_user_id) VALUES (:user_id, :board_id, :title, :description, :status, :image_path, :assigned_to)");
             $stmt->execute(['user_id' => $userId, 'board_id' => $targetBoardId, 'title' => $title, 'description' => $description, 'status' => $status, 'image_path' => $image_path_to_save, 'assigned_to' => $assignedToUserId]);
             if ($stmt->rowCount() > 0) {
-                $lastId = $pdo->lastInsertId(); $assigneeUsername = null;
-                if($assignedToUserId) { $s = $pdo->prepare("SELECT username FROM users WHERE id = :id"); $s->execute(['id' => $assignedToUserId]); $u = $s->fetch(); if($u) $assigneeUsername = $u['username'];}
-                $response = ['success' => true, 'message' => 'Task added.', 'task' => ['id' => $lastId, /* other fields */ 'assigned_to_user_id' => $assignedToUserId, 'assignee_username' => $assigneeUsername]];
-            } else { /* ... error, unlink image ... */ }
-        } catch (PDOException $e) { /* ... error log, unlink image ... */ }
+                $lastId = $pdo->lastInsertId();
+                $assigneeUsername = null;
+                if($assignedToUserId) {
+                    $s = $pdo->prepare("SELECT username FROM users WHERE id = :id");
+                    $s->execute(['id' => $assignedToUserId]);
+                    $u = $s->fetch();
+                    if($u) $assigneeUsername = $u['username'];
+
+                    // Create notification for assignment
+                    $notificationMessage = "You have been assigned a new task: '" . htmlspecialchars($title) . "'";
+                    // Construct a link to the task/board: index.php?boardId=$targetBoardId&taskId=$lastId (example)
+                    // For now, link_url can be a fragment identifier if frontend handles it, or just board specific.
+                    createNotification($pdo, $assignedToUserId, $notificationMessage, "#board-" . $targetBoardId . "-task-" . $lastId);
+                }
+                // Prepare the task data for the response, including all relevant fields
+                $taskDataForResponse = [
+                    'id' => $lastId,
+                    'title' => $title,
+                    'description' => $description,
+                    'status' => $status,
+                    'image_path' => $image_path_to_save,
+                    'assigned_to_user_id' => $assignedToUserId,
+                    'assignee_username' => $assigneeUsername,
+                    'creator_id' => $userId, // Assuming the current user is the creator
+                    'board_id' => $targetBoardId,
+                    'task_order' => 0 // Default order, might need adjustment
+                ];
+                $response = ['success' => true, 'message' => 'Task added.', 'task' => $taskDataForResponse];
+            } else {
+                if ($targetFilePath && file_exists($targetFilePath)) { unlink($targetFilePath); } // Clean up uploaded file on DB error
+                $response['message'] = 'Failed to add task to database.';
+            }
+        } catch (PDOException $e) {
+            error_log("Add Task DB Error: " . $e->getMessage());
+            if ($targetFilePath && file_exists($targetFilePath)) { unlink($targetFilePath); } // Clean up uploaded file on DB error
+            $response['message'] = 'Database error adding task.';
+        }
         break;
 
     case 'update_task':
         $taskId = $_POST['id'] ?? null;
-        // Determine the board_id of the task being updated first to check permission
-        $stmtTaskBoard = $pdo->prepare("SELECT board_id, user_id as creator_id, image_path FROM tasks WHERE id = :task_id");
-        $stmtTaskBoard->execute(['task_id' => $taskId]);
-        $taskBeingUpdated = $stmtTaskBoard->fetch();
+        if (empty($taskId)) { $response['message'] = 'Task ID required for update.'; break; }
+
+        // Determine the board_id and current assignee of the task being updated first
+        $stmtTaskDetails = $pdo->prepare("SELECT board_id, user_id as creator_id, image_path, assigned_to_user_id as current_assignee_id, title FROM tasks WHERE id = :task_id");
+        $stmtTaskDetails->execute(['task_id' => $taskId]);
+        $taskBeingUpdated = $stmtTaskDetails->fetch();
 
         if (!$taskBeingUpdated) { $response['message'] = 'Task not found.'; break; }
         $taskBoardId = $taskBeingUpdated['board_id'];
+        $currentAssigneeId = $taskBeingUpdated['current_assignee_id'];
+        $taskTitleForNotification = $taskBeingUpdated['title']; // Use existing title for notification if not changed by this update
 
         if (!hasBoardPermission($pdo, $userId, $taskBoardId, $userRole, $companyId, ['board_editor', 'board_admin'])) {
             $response['message'] = 'Not authorized to update tasks on this board.'; break;
         }
-        $title = trim($_POST['title'] ?? ''); $description = trim($_POST['description'] ?? ''); $status = trim($_POST['status'] ?? '');
-        $assignedToUserId = isset($_POST['assigned_to_user_id']) && !empty($_POST['assigned_to_user_id']) ? (int)$_POST['assigned_to_user_id'] : null;
+
+        $title = trim($_POST['title'] ?? '');
+        $description = trim($_POST['description'] ?? '');
+        $status = trim($_POST['status'] ?? '');
+        // Ensure assigned_to_user_id is explicitly handled if not present or empty in POST
+        $newAssignedToUserId = (isset($_POST['assigned_to_user_id']) && $_POST['assigned_to_user_id'] !== '') ? (int)$_POST['assigned_to_user_id'] : null;
         $removeImageFlag = isset($_POST['remove_image']) && $_POST['remove_image'] === 'true';
 
-        if (empty($taskId) || empty($title) || empty($status)) { $response['message'] = 'Task ID, title, status required.'; break; }
+        if (empty($title) || empty($status)) { $response['message'] = 'Title and status required.'; break; }
         if (!in_array($status, $allowed_task_statuses)) { $response['message'] = 'Invalid status.'; break; }
         if ($assignedToUserId !== null) {
             $stmtCheckUser = $pdo->prepare("SELECT u.id FROM users u JOIN board_memberships bm ON u.id = bm.user_id WHERE u.id = :user_id AND bm.board_id = :board_id");
@@ -182,12 +240,56 @@ switch ($action) {
 
 
             $stmt = $pdo->prepare("UPDATE tasks SET title = :title, description = :description, status = :status, image_path = :image_path, assigned_to_user_id = :assigned_to WHERE id = :id AND board_id = :board_id");
-            $stmt->execute(['title' => $title, 'description' => $description, 'status' => $status, 'image_path' => $image_path_to_save, 'assigned_to' => $assignedToUserId, 'id' => $taskId, 'board_id' => $taskBoardId]);
+            $updateResult = $stmt->execute([
+                'title' => $title,
+                'description' => $description,
+                'status' => $status,
+                'image_path' => $image_path_to_save,
+                'assigned_to' => $newAssignedToUserId, // Use newAssignedToUserId here
+                'id' => $taskId,
+                'board_id' => $taskBoardId
+            ]);
             
-            $assigneeUsername = null;
-            if($assignedToUserId) { $s = $pdo->prepare("SELECT username FROM users WHERE id = :id"); $s->execute(['id' => $assignedToUserId]); $u = $s->fetch(); if($u) $assigneeUsername = $u['username'];}
-            $response = ['success' => true, 'message' => 'Task updated.', 'task' => [/* task fields */ 'assigned_to_user_id' => $assignedToUserId, 'assignee_username' => $assigneeUsername]];
-        } catch (PDOException $e) { /* ... error log, unlink new image if error ... */ }
+            if ($updateResult) { // Check if execute was successful
+                if ($newAssignedToUserId !== null && $newAssignedToUserId != $currentAssigneeId) {
+                    // Task was assigned to a new user or reassigned from someone else
+                    $finalTitleForNotification = !empty($title) ? $title : $taskTitleForNotification; // Use new title if provided, else old
+                    $notificationMessage = "Task '" . htmlspecialchars($finalTitleForNotification) . "' has been assigned to you.";
+                    createNotification($pdo, $newAssignedToUserId, $notificationMessage, "#board-" . $taskBoardId . "-task-" . $taskId);
+                } elseif ($newAssignedToUserId === null && $currentAssigneeId !== null) {
+                    // Task was unassigned from someone - No notification for this iteration based on plan
+                }
+
+                $assigneeUsername = null;
+                if($newAssignedToUserId) {
+                    $s = $pdo->prepare("SELECT username FROM users WHERE id = :id");
+                    $s->execute(['id' => $newAssignedToUserId]);
+                    $u = $s->fetch();
+                    if($u) $assigneeUsername = $u['username'];
+                }
+                // Prepare full task data for response
+                $taskDataForResponse = [
+                    'id' => (int)$taskId,
+                    'title' => $title,
+                    'description' => $description,
+                    'status' => $status,
+                    'image_path' => $image_path_to_save,
+                    'assigned_to_user_id' => $newAssignedToUserId,
+                    'assignee_username' => $assigneeUsername,
+                    'creator_id' => $taskBeingUpdated['creator_id'], // from initial fetch
+                    'board_id' => (int)$taskBoardId
+                    // task_order is not updated here, handled by 'update_task_order_and_status'
+                ];
+                $response = ['success' => true, 'message' => 'Task updated.', 'task' => $taskDataForResponse];
+            } else {
+                if ($newlyUploadedPath && file_exists($newlyUploadedPath)) { unlink($newlyUploadedPath); }
+                $response['message'] = 'Failed to update task in database.';
+            }
+        } catch (PDOException $e) {
+            error_log("Update Task DB Error: " . $e->getMessage());
+            if ($newlyUploadedPath && file_exists($newlyUploadedPath)) { unlink($newlyUploadedPath); }
+            $response['message'] = 'Database error updating task.';
+        }
         break;
 
     case 'update_task_order_and_status': 

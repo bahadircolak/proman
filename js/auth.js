@@ -108,9 +108,17 @@ $(document).ready(function() {
                  // SA might still want to use regular board view, so boards can be fetched.
                  // if (typeof fetchUserBoards === "function") fetchUserBoards(); // This is called by displayCompanyView or SA specific logic
             }
+            // Start notification polling if function exists
+            if (typeof window.startNotificationPolling === 'function') {
+                window.startNotificationPolling();
+            }
         } else { // Not logged in
             $authContainer.show();
             showLoginForm(); 
+            // Stop notification polling if function exists
+            if (typeof window.stopNotificationPolling === 'function') {
+                window.stopNotificationPolling();
+            }
             $kanbanAppContainer.hide();
             $companyManagementContainer.hide();
             $userInfo.hide();

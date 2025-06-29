@@ -41,6 +41,24 @@
                 </li>
             </ul>
             <ul class="navbar-nav ml-auto">
+                <li class="nav-item dropdown" id="notificationsNav" style="display: none;">
+                    <a class="nav-link" href="#" id="notificationsDropdownToggle" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-bell-fill" viewBox="0 0 16 16">
+                            <path d="M8 16a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2zm.995-14.901a1 1 0 1 0-1.99 0A5.002 5.002 0 0 0 3 6c0 1.098-.5 6-2 7h14c-1.5-1-2-5.902-2-7 0-2.42-1.72-4.44-4.005-4.901z"/>
+                        </svg>
+                        <span id="notificationCountBadge" class="badge badge-danger notification-badge" style="display:none; position:absolute; top: 4px; right: -2px;">0</span>
+                    </a>
+                    <div class="dropdown-menu dropdown-menu-right" id="notificationsDropdownMenu" aria-labelledby="notificationsDropdownToggle">
+                        <!-- Notifications will be populated here by JS -->
+                        <div class="dropdown-header">Notifications</div>
+                        <div id="notificationItemsContainer">
+                            <a class="dropdown-item text-muted text-center" href="#">No new notifications</a>
+                        </div>
+                        <div class="dropdown-divider"></div>
+                        <a class="dropdown-item text-center" href="#" id="markAllNotificationsRead">Mark all as read</a>
+                        <!-- <a class="dropdown-item text-center" href="#">View all notifications</a> -->
+                    </div>
+                </li>
                 <li class="nav-item" id="userInfo" style="display: none;"><span class="navbar-text mr-3">User: <strong id="usernameDisplay"></strong> (<em id="userRoleDisplay"></em>)</span><button class="btn btn-outline-light btn-sm py-0" id="logoutButton">Logout</button></li>
                 <li class="nav-item" id="loginNav" style="display: none;"><a class="nav-link" href="#" id="showLogin">Login</a></li>
                 <li class="nav-item" id="registerNav" style="display: none;"><a class="nav-link" href="#" id="showRegister">Register</a></li>
@@ -184,6 +202,7 @@
     <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script src="js/notifications.js"></script> <!-- Must be before auth.js -->
     <script src="js/auth.js"></script>
     <script src="js/boards.js"></script>
     <script src="js/script.js"></script> 

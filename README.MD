@@ -100,6 +100,17 @@ A standalone Kanban board application built with PHP, MySQL, jQuery, and Bootstr
       CONSTRAINT `fk_task_board` FOREIGN KEY (`board_id`) REFERENCES `boards`(`id`) ON DELETE CASCADE,
       CONSTRAINT `fk_task_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE -- Added FK for user_id in tasks
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+    CREATE TABLE `notifications` (
+      `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      `user_id` INT UNSIGNED NOT NULL COMMENT 'Recipient user ID',
+      `message` VARCHAR(255) NOT NULL COMMENT 'Notification message content',
+      `link_url` VARCHAR(255) NULL COMMENT 'Optional URL for navigation',
+      `is_read` BOOLEAN NOT NULL DEFAULT FALSE,
+      `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX `idx_notification_user` (`user_id`),
+      CONSTRAINT `fk_notification_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     ```
 
 ### 3. Application Configuration

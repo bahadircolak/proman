@@ -87,3 +87,34 @@ body {
 .column-drag-over {
     background-color: #d1e7fd; /* Light blue highlight */
 }
+
+/* Notification Badge in Navbar */
+.notification-badge {
+    position: absolute;
+    top: 5px; /* Adjust as needed */
+    right: 0px; /* Adjust as needed */
+    padding: .25em .4em;
+    font-size: .75em; /* Smaller font size for badge */
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: baseline;
+    border-radius: .35rem; /* Slightly more rounded */
+}
+
+#notificationsDropdownMenu .dropdown-item {
+    white-space: normal; /* Allow notification text to wrap */
+    font-size: 0.9rem;
+}
+
+#notificationsDropdownMenu .dropdown-item.is-read {
+    background-color: #f8f9fa; /* Light grey for read notifications */
+    color: #6c757d;
+}
+
+#notificationsDropdownMenu .dropdown-item small {
+    display: block;
+    color: #6c757d;
+    font-size: 0.8rem;
+}
