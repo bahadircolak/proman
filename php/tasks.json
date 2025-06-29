@@ -1,0 +1,28 @@
+{
+    "tasks": {
+        "task_60f5a9b3a0c1a": {
+            "id": "task_60f5a9b3a0c1a",
+            "title": "Design homepage layout",
+            "description": "Create mockups for the new homepage design.",
+            "status": "todo"
+        },
+        "task_60f5a9b3a0c2b": {
+            "id": "task_60f5a9b3a0c2b",
+            "title": "Develop API endpoints",
+            "description": "Implement all necessary API endpoints for user authentication.",
+            "status": "inprogress"
+        },
+        "task_60f5a9b3a0c3c": {
+            "id": "task_60f5a9b3a0c3c",
+            "title": "Setup project repository",
+            "description": "Initialize Git repository and push initial commit.",
+            "status": "done"
+        },
+        "task_60f5a9b3a0c4d": {
+            "id": "task_60f5a9b3a0c4d",
+            "title": "Write user documentation",
+            "description": "Draft the first version of the user guide.",
+            "status": "todo"
+        }
+    }
+}
