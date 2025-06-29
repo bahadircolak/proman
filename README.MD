@@ -1,4 +1,4 @@
-# Kanban Pro - Task Management Board (Multi-Tenant)
+# ProMan - Task Management Board (Multi-Tenant)
 
 A standalone Kanban board application built with PHP, MySQL, jQuery, and Bootstrap. It supports multiple companies and boards, user authentication, task management with image uploads, and drag-and-drop functionality.
 
