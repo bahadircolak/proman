@@ -207,6 +207,75 @@ $(document).ready(function() {
     // TODO: SA Edit Company functionality (modal, form submission to company_api or superadmin_api)
     // $(document).on('click', '.sa-edit-company-btn', function() { ... });
 
+    // Helper function to show messages in the SA Edit Company modal
+    function showCompanyEditMessage(message, isSuccess) {
+        const $saEditCompanyMessage = $('#saEditCompanyMessage');
+        $saEditCompanyMessage.text(message)
+            .removeClass('alert-success alert-danger')
+            .addClass(isSuccess ? 'alert-success alert-danger' : 'alert-danger')
+            .show();
+    }
+
+    // Handle SA Edit Company button click
+    $(document).on('click', '.sa-edit-company-btn', function() {
+        const companyId = $(this).data('company-id');
+        const companyName = $(this).data('company-name'); // Already escaped from loadAllCompaniesSA
+
+        $('#saEditCompanyIdToUpdate').val(companyId);
+        $('#saEditCompanyName').val(companyName); // Set the raw name for editing
+        $('#saEditCompanyMessage').hide();
+        $('#saEditCompanyModalLabel').text(`Edit Company: ${escapeHtml(companyName)} (ID: ${companyId})`);
+        $('#saEditCompanyModal').modal('show');
+    });
+
+    // Handle SA Save Changes to Company button
+    $('#saSaveChangesToCompanyButton').on('click', function() {
+        const companyIdToUpdate = $('#saEditCompanyIdToUpdate').val();
+        const newCompanyName = $('#saEditCompanyName').val().trim();
+        const token = typeof getCsrfToken === 'function' ? getCsrfToken() : null;
+
+        if (!newCompanyName) {
+            showCompanyEditMessage('Company name cannot be empty.', false);
+            return;
+        }
+        if (!companyIdToUpdate) {
+            showCompanyEditMessage('Company ID is missing. Cannot update.', false);
+            return;
+        }
+        if (!token) {
+            showCompanyEditMessage('CSRF token missing. Please refresh and try again.', false);
+            return;
+        }
+
+        $.ajax({
+            url: 'php/company_api.php', // Using company_api.php as it handles SA updates
+            method: 'POST',
+            data: {
+                action: 'update_company_details',
+                company_id_to_update: companyIdToUpdate,
+                company_name: newCompanyName,
+                csrf_token: token
+            },
+            dataType: 'json',
+            success: function(response) {
+                if (response.success) {
+                    showCompanyEditMessage(response.message || 'Company updated successfully!', true);
+                    setTimeout(function() {
+                        $('#saEditCompanyModal').modal('hide');
+                    }, 1500); // Hide modal after a short delay
+                    loadAllCompaniesSA(); // Refresh the list of companies
+                } else {
+                    showCompanyEditMessage(response.message || 'Failed to update company.', false);
+                }
+            },
+            error: function(xhr) {
+                // Use handleGlobalApiError for consistency if it's suitable, or specific modal message
+                const errorMsg = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : "Server error updating company.";
+                showCompanyEditMessage(errorMsg, false);
+                // console.error("Error updating company (SA):", xhr);
+            }
+        });
+    });
 
     // Initial load if SA dashboard is visible (e.g. direct navigation or after login as SA)
     // This is now primarily triggered by auth.js calling initializeSuperAdminDashboard
