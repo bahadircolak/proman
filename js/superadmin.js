@@ -66,7 +66,7 @@ $(document).ready(function() {
                                     <td>${new Date(company.created_at).toLocaleDateString()}</td>
                                     <td>
                                         <button class="btn btn-sm btn-outline-primary sa-edit-company-btn" data-company-id="${company.id}" data-company-name="${escapeHtml(company.name)}">Edit</button>
-                                        <!-- <button class="btn btn-sm btn-outline-danger sa-delete-company-btn" data-company-id="${company.id}">Delete</button> -->
+                                        <button class="btn btn-sm btn-outline-danger sa-delete-company-btn" data-company-id="${company.id}" data-company-name="${escapeHtml(company.name)}">Delete</button>
                                     </td>
                                 </tr>
                             `);
@@ -273,6 +273,59 @@ $(document).ready(function() {
                 const errorMsg = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : "Server error updating company.";
                 showCompanyEditMessage(errorMsg, false);
                 // console.error("Error updating company (SA):", xhr);
+            }
+        });
+    });
+
+    // Handle SA Delete Company button click (to open confirmation modal)
+    $(document).on('click', '.sa-delete-company-btn', function() {
+        const companyId = $(this).data('company-id');
+        const companyName = $(this).data('company-name'); // Already escaped from loadAllCompaniesSA
+
+        $('#saCompanyIdToDelete').val(companyId);
+        $('#saDeleteCompanyNameConfirm').text(companyName); // Display escaped name
+        $('#saDeleteCompanyIdConfirm').text(companyId);
+        $('#saDeleteCompanyConfirmMessage').hide().removeClass('alert alert-danger alert-success');
+        $('#saDeleteCompanyConfirmModal').modal('show');
+    });
+
+    // Handle SA Confirm Delete Company button click (actual deletion)
+    $('#saConfirmDeleteCompanyButton').on('click', function() {
+        const companyIdToDelete = $('#saCompanyIdToDelete').val();
+        const token = typeof getCsrfToken === 'function' ? getCsrfToken() : null;
+        const $deleteConfirmMessage = $('#saDeleteCompanyConfirmMessage');
+
+        if (!companyIdToDelete) {
+            $deleteConfirmMessage.text('Company ID is missing. Cannot delete.').addClass('alert alert-danger').show();
+            return;
+        }
+        if (!token) {
+            $deleteConfirmMessage.text('CSRF token missing. Please refresh and try again.').addClass('alert alert-danger').show();
+            return;
+        }
+
+        $.ajax({
+            url: superAdminApiUrl, // php/superadmin_api.php
+            method: 'POST',
+            data: {
+                action: 'sa_delete_company',
+                company_id: companyIdToDelete,
+                csrf_token: token
+            },
+            dataType: 'json',
+            success: function(response) {
+                if (response.success) {
+                    showSAMessage(response.message || 'Company deleted successfully!', true);
+                    $('#saDeleteCompanyConfirmModal').modal('hide');
+                    loadAllCompaniesSA(); // Refresh the list of companies
+                } else {
+                    // Display error message inside the confirmation modal
+                    $deleteConfirmMessage.text(response.message || 'Failed to delete company.').removeClass('alert-success').addClass('alert alert-danger').show();
+                }
+            },
+            error: function(xhr) {
+                const errorMsg = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : "Server error deleting company.";
+                $deleteConfirmMessage.text(errorMsg).removeClass('alert-success').addClass('alert alert-danger').show();
             }
         });
     });

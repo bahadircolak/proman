@@ -183,6 +183,66 @@ switch ($action) {
     // TODO: sa_delete_user (careful with ownerships)
     // TODO: Basic reporting endpoints (counts, etc.)
 
+    case 'sa_delete_company': // POST request
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $response['message'] = 'Invalid request method.';
+            http_response_code(405); // Method Not Allowed
+            break;
+        }
+        $companyIdToDelete = $_POST['company_id'] ?? null;
+
+        if (empty($companyIdToDelete)) {
+            $response['message'] = 'Company ID is required for deletion.';
+            break;
+        }
+
+        try {
+            // 1. Verify company exists
+            $stmtCheckCompany = $pdo->prepare("SELECT id FROM companies WHERE id = :company_id");
+            $stmtCheckCompany->execute(['company_id' => $companyIdToDelete]);
+            if (!$stmtCheckCompany->fetch()) {
+                $response['message'] = 'Company not found or already deleted.';
+                $response['success'] = false; // Explicitly set success to false
+                break;
+            }
+
+            // 2. Check for associated users
+            $stmtCheckUsers = $pdo->prepare("SELECT COUNT(*) FROM users WHERE company_id = :company_id");
+            $stmtCheckUsers->execute(['company_id' => $companyIdToDelete]);
+            if ($stmtCheckUsers->fetchColumn() > 0) {
+                $response['message'] = 'Cannot delete company: Users are still associated with it. Please reassign or remove them first.';
+                break;
+            }
+
+            // 3. Check for associated boards
+            $stmtCheckBoards = $pdo->prepare("SELECT COUNT(*) FROM boards WHERE company_id = :company_id");
+            $stmtCheckBoards->execute(['company_id' => $companyIdToDelete]);
+            if ($stmtCheckBoards->fetchColumn() > 0) {
+                $response['message'] = 'Cannot delete company: Boards still exist in it. Please remove them first.';
+                break;
+            }
+
+            // 4. If clear, delete the company
+            $stmtDelete = $pdo->prepare("DELETE FROM companies WHERE id = :company_id");
+            $stmtDelete->execute(['company_id' => $companyIdToDelete]);
+
+            if ($stmtDelete->rowCount() > 0) {
+                $response = ['success' => true, 'message' => 'Company deleted successfully.'];
+            } else {
+                // This case should ideally be caught by the initial existence check,
+                // but as a fallback or if deletion failed for other reasons (e.g. DB constraints not foreseen)
+                $response['message'] = 'Failed to delete company or company was already deleted.';
+            }
+        } catch (PDOException $e) {
+            $response['message'] = 'Database error deleting company.';
+            error_log("SA Delete Company DB Error: " . $e->getMessage());
+            // Check for foreign key constraint violation specifically, though our checks should prevent this.
+            if ($e->getCode() == '23000') { // Integrity constraint violation
+                 $response['message'] = 'Cannot delete company due to existing related data (e.g., users, boards, or other dependencies). Please ensure all related items are removed or reassigned.';
+            }
+        }
+        break;
+
     default:
         $response['message'] = "Action '{$action}' not recognized in SuperAdmin API.";
         http_response_code(404);
