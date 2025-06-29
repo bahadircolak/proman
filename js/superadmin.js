@@ -112,7 +112,7 @@ $(document).ready(function() {
                                                 data-role="${escapeHtml(user.role)}"
                                                 data-company-id="${user.company_id || ''}"
                                                 data-company-name="${escapeHtml(user.company_name || 'N/A')}">Edit</button>
-                                        <!-- <button class="btn btn-sm btn-outline-danger sa-delete-user-btn" data-user-id="${user.id}">Delete</button> -->
+                                        <button class="btn btn-sm btn-outline-danger sa-delete-user-btn" data-user-id="${user.id}" data-username="${escapeHtml(user.username)}">Delete</button>
                                     </td>
                                 </tr>
                             `);
@@ -329,6 +329,69 @@ $(document).ready(function() {
             }
         });
     });
+
+    // Handle SA Delete User button click (to open confirmation modal)
+    $(document).on('click', '.sa-delete-user-btn', function() {
+        const userId = $(this).data('user-id');
+        const username = $(this).data('username'); // Already escaped from loadAllUsersSA
+
+        $('#saUserIdToDeleteConfirm').val(userId);
+        $('#saDeleteUserNameConfirm').text(username); // Display escaped name
+        $('#saDeleteUserIdConfirmSpan').text(userId);
+        $('#saDeleteUserConfirmMessage').hide().removeClass('alert alert-danger alert-success');
+        $('#saDeleteUserConfirmModal').modal('show');
+    });
+
+    // Handle SA Confirm Delete User button click (actual deletion)
+    $('#saConfirmDeleteUserButton').on('click', function() {
+        const userIdToDelete = $('#saUserIdToDeleteConfirm').val();
+        const token = typeof getCsrfToken === 'function' ? getCsrfToken() : null;
+        const $deleteConfirmMessage = $('#saDeleteUserConfirmMessage');
+
+        if (!userIdToDelete) {
+            $deleteConfirmMessage.text('User ID is missing. Cannot delete.').addClass('alert alert-danger').show();
+            return;
+        }
+        // Prevent current super admin from deleting themselves via this button.
+        // Backend also has a check, but good to have a client-side one too.
+        const currentUser = typeof getCurrentUserData === 'function' ? getCurrentUserData() : null;
+        if (currentUser && currentUser.id == userIdToDelete) {
+             $deleteConfirmMessage.text('You cannot delete your own account using this button.').addClass('alert alert-danger').show();
+            return;
+        }
+
+        if (!token) {
+            $deleteConfirmMessage.text('CSRF token missing. Please refresh and try again.').addClass('alert alert-danger').show();
+            return;
+        }
+        $deleteConfirmMessage.hide(); // Hide message before new attempt
+
+        $.ajax({
+            url: superAdminApiUrl, // php/superadmin_api.php
+            method: 'POST',
+            data: {
+                action: 'sa_delete_user',
+                user_id_to_delete: userIdToDelete,
+                csrf_token: token
+            },
+            dataType: 'json',
+            success: function(response) {
+                if (response.success) {
+                    showSAMessage(response.message || 'User deleted successfully!', true);
+                    $('#saDeleteUserConfirmModal').modal('hide');
+                    loadAllUsersSA(); // Refresh the list of users
+                } else {
+                    // Display error message inside the confirmation modal
+                    $deleteConfirmMessage.text(response.message || 'Failed to delete user.').removeClass('alert-success').addClass('alert alert-danger').show();
+                }
+            },
+            error: function(xhr) {
+                const errorMsg = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : "Server error deleting user.";
+                $deleteConfirmMessage.text(errorMsg).removeClass('alert-success').addClass('alert alert-danger').show();
+            }
+        });
+    });
+
 
     // Initial load if SA dashboard is visible (e.g. direct navigation or after login as SA)
     // This is now primarily triggered by auth.js calling initializeSuperAdminDashboard

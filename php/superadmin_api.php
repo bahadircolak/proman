@@ -60,6 +60,101 @@ switch ($action) {
         }
         break;
 
+    case 'sa_delete_user': // POST request
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $response['message'] = 'Invalid request method.';
+            http_response_code(405); // Method Not Allowed
+            break;
+        }
+        $userIdToDelete = $_POST['user_id_to_delete'] ?? null;
+
+        if (empty($userIdToDelete)) {
+            $response['message'] = 'User ID is required for deletion.';
+            break;
+        }
+        if ($userIdToDelete == $userId) { // Current Super Admin trying to delete themselves
+            $response['message'] = 'Super Admins cannot delete their own account directly through this interface.';
+            // Further check for last SA should be done below if role is super_admin
+            break;
+        }
+
+        try {
+            $pdo->beginTransaction();
+
+            // Get user details, especially their role
+            $stmtUser = $pdo->prepare("SELECT role FROM users WHERE id = :id");
+            $stmtUser->execute(['id' => $userIdToDelete]);
+            $userToDelete = $stmtUser->fetch();
+
+            if (!$userToDelete) {
+                $response['message'] = 'User not found.';
+                $pdo->rollBack();
+                break;
+            }
+
+            // 1. Last Super Admin Check
+            if ($userToDelete['role'] === 'super_admin') {
+                $stmtCheckLastSA = $pdo->prepare("SELECT COUNT(*) FROM users WHERE role = 'super_admin'");
+                $stmtCheckLastSA->execute();
+                if ($stmtCheckLastSA->fetchColumn() <= 1) {
+                    $response['message'] = 'Cannot delete the last Super Admin.';
+                    $pdo->rollBack();
+                    break;
+                }
+            }
+
+            // 2. Ownership Check
+            $stmtCheckOwner = $pdo->prepare("SELECT COUNT(*) FROM companies WHERE owner_user_id = :user_id");
+            $stmtCheckOwner->execute(['user_id' => $userIdToDelete]);
+            if ($stmtCheckOwner->fetchColumn() > 0) {
+                $response['message'] = 'Cannot delete user: User is the owner of one or more companies. Please transfer ownership first.';
+                $pdo->rollBack();
+                break;
+            }
+
+            // 3. Board Creator Check
+            $stmtCheckBoardCreator = $pdo->prepare("SELECT COUNT(*) FROM boards WHERE created_by_user_id = :user_id");
+            $stmtCheckBoardCreator->execute(['user_id' => $userIdToDelete]);
+            if ($stmtCheckBoardCreator->fetchColumn() > 0) {
+                $response['message'] = 'Cannot delete user: User has created one or more boards. Please delete or reassign those boards first.';
+                $pdo->rollBack();
+                break;
+            }
+
+            // 4. Task Check
+            $stmtCheckTasks = $pdo->prepare("SELECT COUNT(*) FROM tasks WHERE user_id = :user_id");
+            $stmtCheckTasks->execute(['user_id' => $userIdToDelete]);
+            if ($stmtCheckTasks->fetchColumn() > 0) {
+                $response['message'] = 'Cannot delete user: User has tasks assigned. Please reassign or delete them first.';
+                $pdo->rollBack();
+                break;
+            }
+
+            // If all checks pass:
+            // Delete from board_memberships
+            $stmtDeleteMemberships = $pdo->prepare("DELETE FROM board_memberships WHERE user_id = :user_id");
+            $stmtDeleteMemberships->execute(['user_id' => $userIdToDelete]);
+
+            // Delete from users table
+            $stmtDeleteUser = $pdo->prepare("DELETE FROM users WHERE id = :id");
+            $stmtDeleteUser->execute(['id' => $userIdToDelete]);
+
+            if ($stmtDeleteUser->rowCount() > 0) {
+                $pdo->commit();
+                $response = ['success' => true, 'message' => 'User deleted successfully.'];
+            } else {
+                $pdo->rollBack();
+                // This should ideally be caught by the initial user existence check
+                $response['message'] = 'Failed to delete user or user was already deleted.';
+            }
+
+        } catch (PDOException $e) {
+            $pdo->rollBack();
+            $response['message'] = 'Database error deleting user.';
+            error_log("SA Delete User DB Error: " . $e->getMessage());
+        }
+        break;
+
     case 'sa_list_all_users': // GET request
         try {
             // Exclude password_hash. Join with companies to get company name.
