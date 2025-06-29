@@ -4,6 +4,7 @@ $(document).ready(function() {
     const $saCompanyListTableBody = $('#saCompanyListTableBody');
     const $saUserListTableBody = $('#saUserListTableBody');
     const $superAdminMessages = $('#superAdminMessages');
+    let saCachedCompanies = []; // Cache for company list
 
     // Function to display messages specifically for super admin dashboard
     function showSAMessage(message, isSuccess) {
@@ -25,8 +26,10 @@ $(document).ready(function() {
             $('#companyManagementContainer').hide();
             $('#acceptInvitationContainer').hide();
             
-            loadAllCompaniesSA();
-            loadAllUsersSA();
+            fetchAndCacheCompaniesSA(function() { // Fetch companies first
+                loadAllCompaniesSA(); // Then load the table which might use parts of it
+                loadAllUsersSA(); // Load users, modal will use cached companies
+            });
             // Ensure first tab is active
             $('#superAdminTabs a:first').tab('show');
         } else {
@@ -41,24 +44,73 @@ $(document).ready(function() {
         initializeSuperAdminDashboard(); // This will show the SA dash and hide others
     });
 
-
-    function loadAllCompaniesSA() {
-        $saCompanyListTableBody.html('<tr><td colspan="7">Loading companies...</td></tr>');
+    function fetchAndCacheCompaniesSA(callback) {
         $.ajax({
             url: superAdminApiUrl,
             method: 'GET',
-            data: { action: 'sa_list_all_companies' }, // No CSRF for GET
+            data: { action: 'sa_list_all_companies' },
             dataType: 'json',
             success: function(response) {
-                $saCompanyListTableBody.empty();
                 if (response.success && response.companies) {
-                    if (response.companies.length === 0) {
-                        $saCompanyListTableBody.append('<tr><td colspan="7">No companies found.</td></tr>');
+                    saCachedCompanies = response.companies; // Cache the company list
+                } else {
+                    saCachedCompanies = []; // Clear cache on error
+                    console.error("SA: Failed to fetch or cache companies:", response.message);
+                    showSAMessage("Error: Could not load company list for editing users.", false);
+                }
+                if (typeof callback === 'function') callback();
+            },
+            error: function(xhr) {
+                saCachedCompanies = [];
+                handleGlobalApiError(xhr, "SA: Error fetching company list for caching.");
+                if (typeof callback === 'function') callback();
+            }
+        });
+    }
+
+    function loadAllCompaniesSA() {
+        // This function primarily populates the table.
+        // It can use saCachedCompanies if already populated by fetchAndCacheCompaniesSA,
+        // or rely on its own AJAX call if this is called independently (though current flow is via initializeSuperAdminDashboard).
+        // For simplicity, let's assume saCachedCompanies is the source if available.
+
+        $saCompanyListTableBody.html('<tr><td colspan="7">Loading companies...</td></tr>');
+
+        if (saCachedCompanies.length > 0) {
+            populateCompanyTable(saCachedCompanies);
+        } else {
+            // Fallback or if called before cache is ready - though fetchAndCacheCompaniesSA should handle this.
+            // This AJAX call here essentially becomes a refresh mechanism if called directly.
+            $.ajax({
+                url: superAdminApiUrl,
+                method: 'GET',
+                data: { action: 'sa_list_all_companies' },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success && response.companies) {
+                        saCachedCompanies = response.companies; // Update cache
+                        populateCompanyTable(response.companies);
                     } else {
-                        response.companies.forEach(company => {
-                            $saCompanyListTableBody.append(`
-                                <tr>
-                                    <td>${company.id}</td>
+                        $saCompanyListTableBody.empty().append(`<tr><td colspan="7" class="text-danger">Error: ${response.message || 'Could not load companies.'}</td></tr>`);
+                    }
+                },
+                error: function(xhr) {
+                    handleGlobalApiError(xhr, "Error fetching all companies for table.");
+                    $saCompanyListTableBody.html('<tr><td colspan="7" class="text-danger">Server error loading companies.</td></tr>');
+                }
+            });
+        }
+    }
+
+    function populateCompanyTable(companies) {
+        $saCompanyListTableBody.empty();
+        if (companies.length === 0) {
+            $saCompanyListTableBody.append('<tr><td colspan="7">No companies found.</td></tr>');
+        } else {
+            companies.forEach(company => {
+                $saCompanyListTableBody.append(`
+                    <tr>
+                        <td>${company.id}</td>
                                     <td>${escapeHtml(company.name)}</td>
                                     <td>${escapeHtml(company.owner_username || 'N/A')} (ID: ${company.owner_user_id || 'N/A'})</td>
                                     <td>${company.user_count}</td>
@@ -140,8 +192,23 @@ $(document).ready(function() {
         $('#saEditUserId').val(userId);
         $('#saEditUserName').text(username);
         $('#saEditUserRole').val(role);
-        $('#saEditUserCompany').val(companyId);
-        $('#saEditUserCurrentCompany').text(`${companyName} (ID: ${companyId || 'N/A'})`);
+        // $('#saEditUserCompany').val(companyId); // Old input field, remove/replace
+
+        const $companySelect = $('#saEditUserCompanySelect');
+        $companySelect.empty(); // Clear previous options
+        $companySelect.append($('<option>', { value: '', text: '-- No Company --' }));
+
+        if (saCachedCompanies && saCachedCompanies.length > 0) {
+            saCachedCompanies.forEach(function(company) {
+                $companySelect.append($('<option>', {
+                    value: company.id,
+                    text: escapeHtml(company.name) + ` (ID: ${company.id})`
+                }));
+            });
+        }
+        $companySelect.val(companyId || ''); // Set current company or '' for 'No Company'
+
+        $('#saEditUserCurrentCompany').text(`${escapeHtml(companyName) || 'N/A'} (ID: ${companyId || 'N/A'})`);
         $('#saEditUserMessage').hide();
         $('#saEditUserModal').modal('show');
     });
@@ -150,10 +217,16 @@ $(document).ready(function() {
     $('#saSaveChangesToUserButton').on('click', function() {
         const userIdToUpdate = $('#saEditUserId').val();
         const newRole = $('#saEditUserRole').val();
-        const newCompanyId = $('#saEditUserCompany').val().trim() === '' ? null : parseInt($('#saEditUserCompany').val().trim(), 10);
+        let newCompanyId = $('#saEditUserCompanySelect').val();
+        newCompanyId = newCompanyId === "" ? null : parseInt(newCompanyId, 10); // Convert "" to null for backend
+
         const token = typeof getCsrfToken === 'function' ? getCsrfToken() : null;
 
-        if (!userIdToUpdate || !newRole) { alert("User ID and Role are required."); return; }
+        if (!userIdToUpdate || !newRole) {
+            // Use the modal's message area instead of alert
+            showUserMessage("User ID and Role are required.", false, '#saEditUserMessage');
+            return;
+        }
         if (!token) { alert("CSRF token missing."); return; }
 
         // Call role update first, then company update if needed, or a combined endpoint
@@ -206,6 +279,15 @@ $(document).ready(function() {
     
     // TODO: SA Edit Company functionality (modal, form submission to company_api or superadmin_api)
     // $(document).on('click', '.sa-edit-company-btn', function() { ... });
+
+    // Helper function to show messages in the SA Edit User modal
+    function showUserMessage(message, isSuccess, targetSelector = '#saEditUserMessage') {
+        const $messageArea = $(targetSelector);
+        $messageArea.text(message)
+            .removeClass('alert-success alert-danger')
+            .addClass(isSuccess ? 'alert-success' : 'alert-danger') // Ensure alert-danger for false
+            .show();
+    }
 
     // Helper function to show messages in the SA Edit Company modal
     function showCompanyEditMessage(message, isSuccess) {
