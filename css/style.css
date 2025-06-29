@@ -1,0 +1,89 @@
+/* Basic body styling */
+body {
+    font-family: 'Arial', sans-serif;
+    background-color: #f4f7f6; /* Light gray background */
+}
+
+/* Kanban board columns */
+.kanban-column {
+    background-color: #e9ecef; /* Light gray for columns */
+    border-radius: 5px;
+    padding: 15px;
+    margin-bottom: 20px; /* Spacing between columns on smaller screens */
+    min-height: 400px; /* Minimum height for columns */
+}
+
+.kanban-column h3 {
+    font-size: 1.5rem;
+    margin-bottom: 15px;
+    border-bottom: 2px solid #dee2e6;
+    padding-bottom: 10px;
+    color: #495057; /* Darker text for titles */
+}
+
+/* Task card styling */
+.task-card {
+    background-color: #ffffff; /* White cards */
+    border: 1px solid #ced4da; /* Light border */
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 10px;
+    cursor: grab; /* Indicates draggable */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05); /* Subtle shadow */
+}
+
+.task-card:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1); /* Enhanced shadow on hover */
+}
+
+.task-card h5 {
+    font-size: 1.1rem;
+    margin-bottom: 5px;
+    color: #007bff; /* Blue title for tasks */
+}
+
+.task-card p {
+    font-size: 0.9rem;
+    color: #6c757d; /* Gray for description */
+    margin-bottom: 0;
+}
+
+/* Placeholder style for jQuery UI sortable */
+.ui-sortable-placeholder {
+    border: 2px dashed #adb5bd;
+    background-color: #f8f9fa;
+    height: 50px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+}
+
+/* Style for the add task button */
+#addTaskButtonContainer {
+    text-align: right; /* Align button to the right */
+    margin-bottom: 20px;
+}
+
+/* Modal specific styles */
+#taskModal .modal-header {
+    background-color: #007bff; /* Blue header for modal */
+    color: white;
+}
+
+#taskModal .modal-title {
+    font-weight: bold;
+}
+
+#taskModal .close {
+    color: white;
+    opacity: 0.9;
+}
+
+#taskModal .modal-footer .btn-primary {
+    background-color: #0069d9; /* Darker blue for save button */
+    border-color: #0062cc;
+}
+
+/* Highlight for columns when dragging over */
+.column-drag-over {
+    background-color: #d1e7fd; /* Light blue highlight */
+}
